@@ -1,0 +1,12 @@
+scripts:
+  server: cd src && python manage.py runserver
+  migrate: cd src && python manage.py migrate
+  freeze: venv/bin/python -m pip freeze
+  installs:
+    - venv/bin/pip-compile src/requirements/requirements.in -o src/requirements.txt
+    - venv/bin/python -m pip install -r src/requirements.txt
+  win_installs:
+    - pip-compile src/requirements/requirements.in -o src/requirements.txt
+    - python -m pip install -r src/requirements.txt
+    - npm install
+  win_freeze: python -m pip freeze
