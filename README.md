@@ -1,6 +1,6 @@
 # Hotel Reservation Flask
 
-Welcome to the **Hotel Reservation Flask** project! Follow these steps to set up your Python development environment and run the project locally.
+Welcome to the **AI PELS (name subjet to change)** project! Follow these steps to set up your Python development environment and run the project locally.
 
 ## Prerequisites
 
