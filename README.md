@@ -12,7 +12,7 @@ Welcome to the **Hotel Reservation Flask** project! Follow these steps to set up
 
     ```bash
     git clone https://github.com/brul30/AI_PELS.git
-    cd hotel-reservation-flask
+    cd AI_PELS
     ```
 
 To install packages and run various command shortcuts, we use [rav](https://github.com/jmitchel3/rav). Open `rav.yaml` to see the various commands available if you prefer to not use `rav`.
