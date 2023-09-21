@@ -13,6 +13,9 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 from rest_framework.authtoken.models import Token
 
+import requests
+import json
+
 
 # @api_view(['GET'])
 # def get_Data(request):
@@ -52,3 +55,4 @@ def login(request):
 @permission_classes([IsAuthenticated])
 def test_token(request):
     return Response("passed!")
+
