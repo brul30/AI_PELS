@@ -10,6 +10,8 @@ from rest_framework import serializers
 from .models import Word
 
 class WordSerializer(serializers.ModelSerializer):
-    class Meta(object):
+    class Meta:
         model = Word 
         fields = ['word', 'laymans']
+
+        
