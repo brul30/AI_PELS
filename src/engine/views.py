@@ -96,6 +96,7 @@ def search_word(word):
 
 def get_laymans_gpt4(word):
 
+
     prompt = f"layman pronunciation of word \"{word}\". only use letters and hyphens. format '^[a-zA-Z\-]+$'"
 
     message =[{"role": "user", "content" : prompt}]
@@ -126,29 +127,21 @@ def get_laymans_gpt4(word):
     else:
         raise Exception(f"Error {response.status_code}: {response.text}")
 
-# def get_laymans_webscrape(word):
-#     url = f'https://www.howmanysyllables.com/syllables/{word}'
-#     response = requests.get(url)
-#     soup = bs(response.content, "html.parser")
-#     child_soup = soup.find('p', id='SyllableContentContainer').find_all('span')
-#     for x in child_soup:
-#         print(x)
-#     pronunciation = child_soup[-1].text
-#     return pronunciation
-
 def get_laymans_webscrape(word):
-        url = f'https://www.howmanysyllables.com/syllables/{word}'
-        response = requests.get(url)
-        soup = bs(response.content, "html.parser")
-        pronunciation_spans = soup.find('p', id='SyllableContentContainer')
-        #print(pronunciation_spans)
-        if "How to pronounce" in pronunciation_spans.text:
-            #print(True)
-            return pronunciation_spans.find_all('span', class_='Answer_Red')[-1].text
-        else:
-            #print(False)
-            #print("Pronunciation not found")
-            return None
+        
+    link = config("LINK", default='none')
+    url = f'{link}{word}'
+    response = requests.get(url)
+    soup = bs(response.content, "html.parser")
+    pronunciation_spans = soup.find('p', id='SyllableContentContainer')
+    #print(pronunciation_spans)
+    if "How to pronounce" in pronunciation_spans.text:
+        #print(True)
+        return pronunciation_spans.find_all('span', class_='Answer_Red')[-1].text
+    else:
+        #print(False)
+        #print("Pronunciation not found")
+        return None
 
 def is_valid_result(result):
     if result is None:
