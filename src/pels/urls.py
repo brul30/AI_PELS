@@ -19,8 +19,9 @@ from django.urls import path, include
 from . import views
 
 urlpatterns = [
-    path('', views.home_view),
+    path('audio', views.audio),
     path('', include('api.urls')),
     path('', include('engine.urls')),
+    path('', include('audio.urls')),
     path('admin/', admin.site.urls),
 ]

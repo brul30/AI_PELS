@@ -263,3 +263,5 @@ dist
 .pnp.*
 
 package-lock.json
+
+requirements.txt

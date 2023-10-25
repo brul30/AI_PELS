@@ -1,10 +1,6 @@
 from django.http import HttpResponse
+from rest_framework.decorators import api_view
 
-
-
-def home_view(request):
-    return HttpResponse("Hello World")
-
-
-def customer_page(request):
-    return HttpResponse("Welcome Customer")
+@api_view(['GET'])
+def audio(request):
+    return HttpResponse("Audio received")
