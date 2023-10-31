@@ -6,19 +6,40 @@ import time
 import requests
 import json
 from pels.env import config
+import os
 
 @api_view(['POST'])
 def send_audio_to_speechsuper(request):
-    audio_file = request.FILES.get('audio')
+    print("new request just sent")
+    audio_file = request.FILES.get('audioFile')
+    if not audio_file:
+        print("no audio")
+
+
     refText = request.data['refText']
+    print(refText)
     appKey = config("SPEECH_SUPER_APP_KEY", default='none')
     secretKey = config("SPEECH_SUPER_SECRET_KEY", default='none')
     baseURL = "https://api.speechsuper.com/"
 
+
+    if audio_file:
+            save_directory = 'recordings' 
+            if not os.path.exists(save_directory):
+                os.makedirs(save_directory) 
+
+            file_path = os.path.join(save_directory, 'audio.wav')
+            with open(file_path, 'wb') as file:
+                for chunk in audio_file.chunks():
+                    file.write(chunk)
+
+            print(f'Audio file saved at: {file_path}')
+
+
     timestamp = str(int(time.time()))
 
     coreType = "word.eval" # Change the coreType according to your needs.
-    #refText = "supermarket" # Change the audio path corresponding to the reference text.
+    #refText = "carpet" # Change the audio path corresponding to the reference text.
     audioType = "wav" # Change the audio type corresponding to the audio file.
     audioSampleRate = 16000
     userId = "guest"
@@ -71,7 +92,7 @@ def send_audio_to_speechsuper(request):
         }
     }
 
-    print("params",params)
+    #print("params",params)
 
     # Send the data to the SpeechSuper API
     datas = json.dumps(params)
@@ -79,7 +100,7 @@ def send_audio_to_speechsuper(request):
     headers = {"Request-Index": "0"}
     files = {"audio": audio_file}
     
-    print("datas", datas)
+    #print("datas", datas)
     res = requests.post(url, data=data, headers=headers, files=files)
-    
+    print({'response': res.text.encode('utf-8', 'ignore').decode('utf-8')})
     return Response({'response': res.text.encode('utf-8', 'ignore').decode('utf-8')})
