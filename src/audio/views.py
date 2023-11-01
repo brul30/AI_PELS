@@ -23,17 +23,17 @@ def send_audio_to_speechsuper(request):
     baseURL = "https://api.speechsuper.com/"
 
 
-    if audio_file:
-            save_directory = 'recordings' 
-            if not os.path.exists(save_directory):
-                os.makedirs(save_directory) 
+    # if audio_file:
+    #         save_directory = 'recordings' 
+    #         if not os.path.exists(save_directory):
+    #             os.makedirs(save_directory) 
 
-            file_path = os.path.join(save_directory, 'audio.wav')
-            with open(file_path, 'wb') as file:
-                for chunk in audio_file.chunks():
-                    file.write(chunk)
+    #         file_path = os.path.join(save_directory, 'audio.wav')
+    #         with open(file_path, 'wb') as file:
+    #             for chunk in audio_file.chunks():
+    #                 file.write(chunk)
 
-            print(f'Audio file saved at: {file_path}')
+    #         print(f'Audio file saved at: {file_path}')
 
 
     timestamp = str(int(time.time()))
@@ -102,5 +102,23 @@ def send_audio_to_speechsuper(request):
     
     #print("datas", datas)
     res = requests.post(url, data=data, headers=headers, files=files)
-    print({'response': res.text.encode('utf-8', 'ignore').decode('utf-8')})
-    return Response({'response': res.text.encode('utf-8', 'ignore').decode('utf-8')})
+    #print({'response': res.text.encode('utf-8', 'ignore').decode('utf-8')})
+    #return Response({'response': res.text.encode('utf-8', 'ignore').decode('utf-8')})
+
+
+    response_data = json.loads(res.text)
+
+    # Extract the "phonics" information
+    phonics = response_data.get('result', {}).get('words', [])[0].get('phonics', [])
+
+    # Prepare the response with only the "phonics" information
+    response_phonics = [
+        {
+            "spell": item.get("spell"),
+            "phoneme": item.get("phoneme"),
+            "overall": item.get("overall"),
+        }
+        for item in phonics
+    ]
+
+    return Response({"phonics": response_phonics})
