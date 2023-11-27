@@ -96,7 +96,7 @@ def create_word(word, laymans):
 
     word = Word(word=word, laymans=laymans)
     word.save()
-    return  status.HTTP_200_OK
+    #return  status.HTTP_200_OK
 
 
 
@@ -108,8 +108,9 @@ def feedback(request):
     message =[{"role": "user", "content" : f"In one sentece Generate advice for correcting mispronunciation of '{mispronounced_phoneme}' from the word {word} with laysmans {laymans}. Use the following as reference, for the laymans of in-tuh-lek-choo-uhl, the user misspronounced the choo and the feedback is as follow: Try to say choo instead of shoo How to improve Try to block the air with your tongue then relax it slightly to let air out for a 'sh' sound."}]
 
 
-    key = "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"
-    endpoint = "https://api.openai.com/v1/chat/completions"
+
+    key = config("OPENAI_SECRET_KEY", default='none')
+    endpoint = config("OPENAI_ENDPOINT", default='none')
 
     headers = {
 
