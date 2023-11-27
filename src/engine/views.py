@@ -96,4 +96,42 @@ def create_word(word, laymans):
 
     word = Word(word=word, laymans=laymans)
     word.save()
+    return  status.HTTP_200_OK
 
+
+
+@api_view(['POST'])
+def feedback(request):
+    mispronounced_phoneme=request.data.get('mispronounciation')
+    word = request.data.get('word')
+    laymans = request.data.get('laymans')
+    message =[{"role": "user", "content" : f"In one sentece Generate advice for correcting mispronunciation of '{mispronounced_phoneme}' from the word {word} with laysmans {laymans}. Use the following as reference, for the laymans of in-tuh-lek-choo-uhl, the user misspronounced the choo and the feedback is as follow: Try to say choo instead of shoo How to improve Try to block the air with your tongue then relax it slightly to let air out for a 'sh' sound."}]
+
+
+    key = "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"
+    endpoint = "https://api.openai.com/v1/chat/completions"
+
+    headers = {
+
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {key}",
+    }
+
+    data = {
+
+        "model": "gpt-4-0613",
+        "messages": message,
+        "temperature": 0,
+    }
+
+    response = requests.post(endpoint, headers=headers, data=json.dumps(data))
+
+    if response.status_code == 200:
+
+        output = response.json()['choices'][0]['message']['content']
+        #laymans_list = re.split('-', laymans)
+        #laymans_list = laymans.split('-')
+        #print(laymans_list)
+        return Response({"feedback":output})
+    else:
+        return Exception(f"Error {response.status_code}: {response.text}")
