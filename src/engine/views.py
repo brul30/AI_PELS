@@ -31,11 +31,12 @@ def search(request):
                          **serializer.data})
     
     else:
-        
-        laymans = get_laymans(word_data)
-        #print(laymans)
-        create_word(word_data, laymans)
-        return search_word(word_data)
+        try:
+            laymans = get_laymans(word_data)
+            create_word(word_data, laymans)
+            return search_word(word_data)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 def search_word(word):
 
@@ -86,9 +87,8 @@ def get_laymans(word):
         laymans_list = laymans.split('-')
         #print(laymans_list)
         return laymans_list
-        
     else:
-        return Exception(f"Error {response.status_code}: {response.text}")
+        raise Exception(f"Error {response.status_code}: {response.text}")
     
 def create_word(word, laymans):
 
@@ -96,8 +96,6 @@ def create_word(word, laymans):
 
     word = Word(word=word, laymans=laymans)
     word.save()
-    #return  status.HTTP_200_OK
-
 
 
 @api_view(['POST'])
@@ -135,4 +133,4 @@ def feedback(request):
         #print(laymans_list)
         return Response({"feedback":output})
     else:
-        return Exception(f"Error {response.status_code}: {response.text}")
+        return Response(f"Error {response.status_code}: {response.text}")

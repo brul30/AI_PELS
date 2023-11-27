@@ -5,7 +5,7 @@ from . import views
 
 urlpatterns = [
     # ... other paths
-    path('search', views.search),
+    path('search', views.search, name='search'),
     path('feedback',views.feedback),
 
 ]
