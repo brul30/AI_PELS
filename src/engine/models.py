@@ -6,6 +6,7 @@ from django.contrib.postgres.fields import ArrayField
 class Word(models.Model):
 
     word = models.CharField(max_length=100)
+    phonetic = ArrayField(models.CharField(max_length=100), blank=True)
     laymans = ArrayField(models.CharField(max_length=100), blank=True)
 
     def __str__(self):

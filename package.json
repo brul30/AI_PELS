@@ -1,0 +1,10 @@
+{
+  "name": "AI_PELS",
+  "lockfileVersion": 2,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "AI_PELS"
+    }
+  }
+}

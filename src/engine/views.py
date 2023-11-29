@@ -4,7 +4,10 @@ from bs4 import BeautifulSoup as bs
 import re
 import json
 import requests
-
+import time
+import hashlib
+import os
+import ast
 from .serializers import WordSerializer
 from .models import Word
 
@@ -12,34 +15,105 @@ import requests
 import json
 
 from pels.env import config
+from dotenv import load_dotenv
+load_dotenv()
 
 from rest_framework import status
 
-@api_view(['POST'])
-def search(request):
+def get_phonetic(word):
 
-    word_data = request.data.get('search')
+    baseURL = "https://api.speechsuper.com/"
+    appKey = os.getenv('SPEECH_SUPER_APP_KEY')
+    secretKey = os.getenv('SPEECH_SUPER_SECRET_KEY')
+    baseURL = "https://api.speechsuper.com/"
+    timestamp = str(int(time.time()))
+    coreType = "word.eval"         # Change the coreType according to your needs.
+    refText = f"{word}"        # Change the reference text according to your needs.
+    audioType = "wav"              # Change the audio type corresponding to the audio file.
+    audioSampleRate = 16000
+    userId = "guest"
+    url =  baseURL + coreType
+    connectStr = (appKey + timestamp + secretKey).encode("utf-8")
+    connectSig = hashlib.sha1(connectStr).hexdigest()
+    startStr = (appKey + timestamp + userId + secretKey).encode("utf-8")
+    startSig = hashlib.sha1(startStr).hexdigest()
+    params={
+        "connect":{
+            "cmd":"connect",
+            "param":{
+                "sdk":{
+                    "version":16777472,
+                    "source":9,
+                    "protocol":2
+                },
+                "app":{
+                    "applicationId":appKey,
+                    "sig":connectSig,
+                    "timestamp":timestamp
+                }
+            }
+        },
+        "start":{
+            "cmd":"start",
+            "param":{
+                "app":{
+                    "userId":userId,
+                    "applicationId":appKey,
+                    "timestamp":timestamp,
+                    "sig":startSig
+                },
+                "audio":{
+                    "audioType":audioType,
+                    "channel":1,
+                    "sampleBytes":2,
+                    "sampleRate":audioSampleRate
+                },
+                "request":{
+                    "coreType":coreType,
+                    "refText":refText,
+                    "tokenId":"tokenId"
+                }
+            }
+        }
+    }
+    datas=json.dumps(params)
+    data={'text':datas}
+    headers={"Request-Index":"0"}
+    res=requests.post(url, data=data, headers=headers).text.encode('utf-8', 'ignore').decode('utf-8')
+    data = json.loads(res)
+    phonetics = [stress_entry['phonetic'] for stress_entry in data['result']['words'][0]['scores']['stress']]
+    return phonetics
 
-    #print(word_data)
-    
-    # Validate that word_data exists and is a string (this is a simple validation example)
-    if not word_data or not isinstance(word_data, str):
-        return Response({'error': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
+def phonetic_to_laymans(phonetic):
 
-    # Check if the word exists
-    if Word.objects.filter(word=word_data).exists():
+    OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
+    OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
 
-        serializer = WordSerializer(Word.objects.get(word=word_data))
+    prompt = f"Convert {phonetic} to simple English pronunciations. Give me the array ONLY."
+    message =[{"role": "user", "content" : prompt}]
+    model = 'gpt-4-1106-preview'
 
-        return Response({'info': "word was found in database",
-                         **serializer.data})
-    
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
+    }
+
+    data = {
+        "model": model,
+        "messages": message,
+        "temperature": 0,
+    }
+
+    response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
+
+    if response.status_code == 200:      
+        #print(response.json())
+        answer = response.json()["choices"][0]["message"]["content"]
+        pattern = r"'(.*?)'"
+        laymans = re.findall(pattern, answer)
+        return laymans
     else:
-        
-        laymans = get_laymans(word_data)
-        #print(laymans)
-        create_word(word_data, laymans)
-        return search_word(word_data)
+        raise Exception(f"Error {response.status_code}: {response.text}")
 
 def search_word(word):
 
@@ -58,121 +132,37 @@ def search_word(word):
     else:
         
         return Response({'error': "word was not found in database"})
-   
-# def get_laymans(word):
-
-#     #print("laymans reached", word)
-
-#     message =[{"role": "user", "content" : f"generate english layman pronunciation of {word} in the format: abc-def-ghi. no extra symbols"}]
-
-#     key = config("OPENAI_SECRET_KEY", default='none')
-#     endpoint = config("OPENAI_ENDPOINT", default='none')
-
-#     headers = {
-
-#         "Content-Type": "application/json",
-#         "Authorization": f"Bearer {key}",
-#     }
-
-#     data = {
-
-#         "model": "gpt-4-0613",
-#         "messages": message,
-#         "temperature": 0,
-#     }
-
-#     response = requests.post(endpoint, headers=headers, data=json.dumps(data))
-
-#     if response.status_code == 200:
-
-#         laymans = response.json()['choices'][0]['message']['content']
-#         #laymans_list = re.split('-', laymans)
-#         laymans_list = laymans.split('-')
-#         #print(laymans_list)
-#         return laymans_list
-        
-#     else:
-#         return Exception(f"Error {response.status_code}: {response.text}")
-
-def get_laymans_gpt4(word):
-
-
-    prompt = f"layman pronunciation of word \"{word}\". only use letters and hyphens. format '^[a-zA-Z\-]+$'"
-
-    message =[{"role": "user", "content" : prompt}]
-
-    key = config("OPENAI_SECRET_KEY", default='none')
-    endpoint = config("OPENAI_ENDPOINT", default='none')
-
-    model="gpt-4-0613"
-
-    temperature=0
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {key}",
-    }
-
-    data = {
-        "model": model,
-        "messages": message,
-        "temperature": temperature,
-    }
-
-    response = requests.post(endpoint, headers=headers, data=json.dumps(data))
-
-    if response.status_code == 200:      
-        #print(response.json())
-        return response.json()["choices"][0]["message"]["content"]
-    else:
-        raise Exception(f"Error {response.status_code}: {response.text}")
-
-def get_laymans_webscrape(word):
-        
-    link = config("LINK", default='none')
-    url = f'{link}{word}'
-    response = requests.get(url)
-    soup = bs(response.content, "html.parser")
-    pronunciation_spans = soup.find('p', id='SyllableContentContainer')
-    #print(pronunciation_spans)
-    if "How to pronounce" in pronunciation_spans.text:
-        #print(True)
-        return pronunciation_spans.find_all('span', class_='Answer_Red')[-1].text
-    else:
-        #print(False)
-        #print("Pronunciation not found")
-        return None
-
-def is_valid_result(result):
-    if result is None:
-        return False  # or however you want to handle a None result
-    if re.search(r'^[a-zA-Z\-]+$', result):
-        return True
-    return False
 
 def get_laymans(word):
 
-    webscraped = get_laymans_webscrape(word)
+    phonetic = get_phonetic(word)
+    laymans = phonetic_to_laymans(phonetic)
+    return phonetic, laymans
     
-    if is_valid_result(webscraped):
-        print(f"webscraped: {webscraped}")
-        webscraped_list = webscraped.split('-') 
-        return webscraped_list
-    
-    else:
-        for i in range(5):
-            gpt4 = get_laymans_gpt4(word).strip()
-            print(f"gpt4: {gpt4}")
-            if is_valid_result(gpt4):
-                gpt_list = gpt4.split('-')
-                return gpt_list
-            print(f"gpt4 failed, trying again... {i+1} Result: {gpt4}")
-        return "null"
-    
-def create_word(word, laymans):
+def create_word(word, phonetic, laymans):
 
-    #print("create_word reached", word, laymans)
-
-    word = Word(word=word, laymans=laymans)
+    word = Word(word=word, phonetic=phonetic, laymans=laymans)
     word.save()
 
+@api_view(['POST'])
+def search(request):
+
+    word = request.data.get('search')
+    
+    if not word or not isinstance(word, str):
+        return Response({'error': 'Invalid data'}, status=status.HTTP_400_BAD_REQUEST)
+
+    # Check if the word exists
+    if Word.objects.filter(word=word).exists():
+
+        serializer = WordSerializer(Word.objects.get(word=word))
+
+        return Response({'info': "word was found in database",
+                         **serializer.data})
+    
+    else:
+        
+        print("word not found in database")
+        phonetic, laymans = get_laymans(word)
+        create_word(word, phonetic, laymans)
+        return search_word(word)
