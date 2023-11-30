@@ -166,3 +166,41 @@ def search(request):
         phonetic, laymans = get_laymans(word)
         create_word(word, phonetic, laymans)
         return search_word(word)
+
+@api_view(['POST'])
+def feedback(request):
+    word = request.data.get('word')
+    syllable = request.data.get('syllable')
+    score = request.data.get('score')
+
+    feedbacks = []
+    if score <= 60:
+        OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
+        OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
+        }
+
+        prompt = f"How can one improve the pronunciation of the syllable '{syllable}' in the word '{word}'? In one sentence provide detailed tips."
+        message = [{"role": "user", "content": prompt}]
+        model = 'gpt-4-1106-preview'
+        data = {
+            "model": model,
+            "messages": message,
+            "temperature": 0,
+        }
+
+        response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
+
+        if response.status_code == 200:
+            answer = response.json()["choices"][0]["message"]["content"]
+            feedbacks.append({"phrase": syllable, "suggestion": answer})
+        else:
+            raise Exception(f"Error {response.status_code}: {response.text}")
+
+    response_data = {
+        "feedback": feedbacks
+    }
+
+    return Response(response_data)
