@@ -1,6 +1,5 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
-from bs4 import BeautifulSoup as bs
 import re
 import json
 import requests
@@ -82,14 +81,15 @@ def get_phonetic(word):
     res=requests.post(url, data=data, headers=headers).text.encode('utf-8', 'ignore').decode('utf-8')
     data = json.loads(res)
     phonetics = [stress_entry['phonetic'] for stress_entry in data['result']['words'][0]['scores']['stress']]
+    print(res)
     return phonetics
 
-def phonetic_to_laymans(phonetic):
+def phonetic_to_laymans(phonetic, word):
 
     OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
     OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
 
-    prompt = f"Convert {phonetic} to simple English pronunciations. Give me the array ONLY."
+    prompt = f"Convert {phonetic} from {word} to simple American layman's pronunciation. Give me the array ONLY, seperate each syllable."
     message =[{"role": "user", "content" : prompt}]
     model = 'gpt-4-1106-preview'
 
@@ -109,7 +109,8 @@ def phonetic_to_laymans(phonetic):
     if response.status_code == 200:      
         #print(response.json())
         answer = response.json()["choices"][0]["message"]["content"]
-        pattern = r"'(.*?)'"
+        print(answer)
+        pattern = r"[\"'](.*?)[\"']"
         laymans = re.findall(pattern, answer)
         return laymans
     else:
@@ -126,7 +127,7 @@ def search_word(word):
 
         serializer = WordSerializer(Word.objects.get(word=word))
 
-        return Response({'info': "word was not found in database, created new word",
+        return Response({'info': "word was found in database, created new word",
                          **serializer.data})
     
     else:
@@ -136,13 +137,30 @@ def search_word(word):
 def get_laymans(word):
 
     phonetic = get_phonetic(word)
-    laymans = phonetic_to_laymans(phonetic)
+    laymans = phonetic_to_laymans(phonetic, word)
     return phonetic, laymans
     
 def create_word(word, phonetic, laymans):
 
     word = Word(word=word, phonetic=phonetic, laymans=laymans)
     word.save()
+
+def get_laymans_from_database(word):
+    
+        if not word or not isinstance(word, str):
+    
+            return None
+    
+        # Check if the word exists
+        if Word.objects.filter(word=word).exists():
+
+            print("word found in database")
+    
+            return Word.objects.get(word=word)
+        
+        else:
+            
+            return None
 
 @api_view(['POST'])
 def search(request):
@@ -169,38 +187,69 @@ def search(request):
 
 @api_view(['POST'])
 def feedback(request):
+    
+    scores = request.data.get('response')
     word = request.data.get('word')
-    syllable = request.data.get('syllable')
-    score = request.data.get('score')
+    laymans = get_laymans_from_database(word)
+    #print(laymans.laymans)
 
-    feedbacks = []
-    if score <= 60:
-        OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
-        OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
-        }
+    response_feedbacks = []
+    response_laymans = []
 
-        prompt = f"How can one improve the pronunciation of the syllable '{syllable}' in the word '{word}'? In one sentence provide detailed tips."
-        message = [{"role": "user", "content": prompt}]
-        model = 'gpt-4-1106-preview'
-        data = {
-            "model": model,
-            "messages": message,
-            "temperature": 0,
-        }
+    for i, x in enumerate(scores):
 
-        response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
+        if x.get('overall') <= 70:
+            #print(x.get('overall'), laymans.laymans[i])
+            response_laymans.append({"phrase": laymans.laymans[i], "score": x.get('overall')})
+            OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
+            OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
+            headers = {
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
+            }
 
-        if response.status_code == 200:
-            answer = response.json()["choices"][0]["message"]["content"]
-            feedbacks.append({"phrase": syllable, "suggestion": answer})
-        else:
-            raise Exception(f"Error {response.status_code}: {response.text}")
+            prompt = f"For '{laymans.laymans[i]}' in '{word}', give a concise articulation tip. One sentence only."
+            message = [{"role": "user", "content": prompt}]
+            model = 'gpt-4-1106-preview'
+            data = {
+                "model": model,
+                "messages": message,
+                "temperature": 1,
+            }
 
-    response_data = {
-        "feedback": feedbacks
-    }
+            response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
 
-    return Response(response_data)
+            if response.status_code == 200:
+                answer = response.json()["choices"][0]["message"]["content"]
+                response_feedbacks.append({"phrase": laymans.laymans[i], "suggestion": answer})
+            else:
+                raise Exception(f"Error {response.status_code}: {response.text}")
+            
+    return Response(data={"laymans": response_laymans, "feedbacks": response_feedbacks}, status=status.HTTP_200_OK)
+    
+    
+    
+    # if score <= 60:
+    #     OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
+    #     OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
+    #     headers = {
+    #         "Content-Type": "application/json",
+    #         "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
+    #     }
+
+    #     prompt = f"How can one improve the pronunciation of the syllable '{syllable}' in the word '{word}'? In one sentence provide detailed tips."
+    #     message = [{"role": "user", "content": prompt}]
+    #     model = 'gpt-4-1106-preview'
+    #     data = {
+    #         "model": model,
+    #         "messages": message,
+    #         "temperature": 0,
+    #     }
+
+    #     response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
+
+    #     if response.status_code == 200:
+    #         answer = response.json()["choices"][0]["message"]["content"]
+    #         feedbacks.append({"phrase": syllable, "suggestion": answer})
+    #     else:
+    #         raise Exception(f"Error {response.status_code}: {response.text}")
