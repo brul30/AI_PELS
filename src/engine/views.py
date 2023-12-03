@@ -165,6 +165,8 @@ def get_laymans_from_database(word):
 @api_view(['POST'])
 def search(request):
 
+    print(request.data)
+
     word = request.data.get('search')
     
     if not word or not isinstance(word, str):
@@ -198,9 +200,10 @@ def feedback(request):
 
     for i, x in enumerate(scores):
 
+        response_laymans.append({"phrase": laymans.laymans[i], "score": x.get('overall')})
+
         if x.get('overall') <= 70:
             #print(x.get('overall'), laymans.laymans[i])
-            response_laymans.append({"phrase": laymans.laymans[i], "score": x.get('overall')})
             OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
             OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
             headers = {
@@ -226,30 +229,3 @@ def feedback(request):
                 raise Exception(f"Error {response.status_code}: {response.text}")
             
     return Response(data={"laymans": response_laymans, "feedbacks": response_feedbacks}, status=status.HTTP_200_OK)
-    
-    
-    
-    # if score <= 60:
-    #     OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
-    #     OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
-    #     headers = {
-    #         "Content-Type": "application/json",
-    #         "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
-    #     }
-
-    #     prompt = f"How can one improve the pronunciation of the syllable '{syllable}' in the word '{word}'? In one sentence provide detailed tips."
-    #     message = [{"role": "user", "content": prompt}]
-    #     model = 'gpt-4-1106-preview'
-    #     data = {
-    #         "model": model,
-    #         "messages": message,
-    #         "temperature": 0,
-    #     }
-
-    #     response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
-
-    #     if response.status_code == 200:
-    #         answer = response.json()["choices"][0]["message"]["content"]
-    #         feedbacks.append({"phrase": syllable, "suggestion": answer})
-    #     else:
-    #         raise Exception(f"Error {response.status_code}: {response.text}")
