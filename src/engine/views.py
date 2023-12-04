@@ -14,7 +14,8 @@ import requests
 import json
 
 from pels.env import config
-
+from dotenv import load_dotenv
+load_dotenv()
 
 from rest_framework import status
 
@@ -86,6 +87,7 @@ def phonetic_to_laymans(phonetic, word):
 
     OPENAI_SECRET_KEY = config("OPENAI_SECRET_KEY",default='none')
     OPENAI_ENDPOINT = config("OPENAI_ENDPOINT",default='none')
+
     prompt = f"Convert {phonetic} from {word} to simple American layman's pronunciation. Give me the array ONLY, seperate each syllable."
     message =[{"role": "user", "content" : prompt}]
     model = 'gpt-4-1106-preview'
@@ -162,6 +164,8 @@ def get_laymans_from_database(word):
 @api_view(['POST'])
 def search(request):
 
+    print(request.data)
+
     word = request.data.get('search')
     
     if not word or not isinstance(word, str):
@@ -195,9 +199,10 @@ def feedback(request):
 
     for i, x in enumerate(scores):
 
+        response_laymans.append({"phrase": laymans.laymans[i], "score": x.get('overall')})
+
         if x.get('overall') <= 70:
             #print(x.get('overall'), laymans.laymans[i])
-            response_laymans.append({"phrase": laymans.laymans[i], "score": x.get('overall')})
             OPENAI_SECRET_KEY = config("OPENAI_SECRET_KEY",default='none')
             OPENAI_ENDPOINT = config("OPENAI_ENDPOINT",default='none')
             headers = {
@@ -223,4 +228,3 @@ def feedback(request):
                 raise Exception(f"Error {response.status_code}: {response.text}")
             
     return Response(data={"laymans": response_laymans, "feedbacks": response_feedbacks}, status=status.HTTP_200_OK)
-    
