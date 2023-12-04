@@ -14,8 +14,8 @@ import requests
 import json
 
 from pels.env import config
-from dotenv import load_dotenv
-load_dotenv()
+#from dotenv import load_dotenv
+#load_dotenv()
 
 from rest_framework import status
 
