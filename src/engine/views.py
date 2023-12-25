@@ -5,8 +5,9 @@ import json
 import requests
 import time
 import hashlib
-import os
-import ast
+
+from rest_framework import status
+from engine.utility import make_openAI_request
 from .serializers import WordSerializer
 from .models import Word
 
@@ -14,10 +15,8 @@ import requests
 import json
 
 from pels.env import config
-#from dotenv import load_dotenv
-#load_dotenv()
 
-from rest_framework import status
+
 
 def get_phonetic(word):
 
@@ -84,36 +83,21 @@ def get_phonetic(word):
     return phonetics
 
 def phonetic_to_laymans(phonetic, word):
+    try:
+        prompt = f"Convert {phonetic} from {word} to simple American layman's pronunciation. Give me the array ONLY, seperate each syllable."
+        model = 'gpt-4-1106-preview'
+        response = make_openAI_request(prompt,model,0)
 
-    OPENAI_SECRET_KEY = config("OPENAI_SECRET_KEY",default='none')
-    OPENAI_ENDPOINT = config("OPENAI_ENDPOINT",default='none')
-
-    prompt = f"Convert {phonetic} from {word} to simple American layman's pronunciation. Give me the array ONLY, seperate each syllable."
-    message =[{"role": "user", "content" : prompt}]
-    model = 'gpt-4-1106-preview'
-
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
-    }
-
-    data = {
-        "model": model,
-        "messages": message,
-        "temperature": 0,
-    }
-
-    response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
-
-    if response.status_code == 200:      
-        #print(response.json())
-        answer = response.json()["choices"][0]["message"]["content"]
+        answer = response["choices"][0]["message"]["content"]
         print(answer)
         pattern = r"[\"'](.*?)[\"']"
         laymans = re.findall(pattern, answer)
         return laymans
-    else:
-        raise Exception(f"Error {response.status_code}: {response.text}")
+    
+    except Exception as e:
+        print(f"Error occured on: {e}")
+        return []
+
 
 def search_word(word):
 
@@ -202,29 +186,19 @@ def feedback(request):
         response_laymans.append({"phrase": laymans.laymans[i], "score": x.get('overall')})
 
         if x.get('overall') <= 70:
-            #print(x.get('overall'), laymans.laymans[i])
-            OPENAI_SECRET_KEY = config("OPENAI_SECRET_KEY",default='none')
-            OPENAI_ENDPOINT = config("OPENAI_ENDPOINT",default='none')
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
-            }
+            try:
+                #print(x.get('overall'), laymans.laymans[i])
+                prompt = f"For '{laymans.laymans[i]}' in '{word}', give a concise articulation tip. One sentence only."
+                model = 'gpt-4-1106-preview'
+                temperature = 1
 
-            prompt = f"For '{laymans.laymans[i]}' in '{word}', give a concise articulation tip. One sentence only."
-            message = [{"role": "user", "content": prompt}]
-            model = 'gpt-4-1106-preview'
-            data = {
-                "model": model,
-                "messages": message,
-                "temperature": 1,
-            }
+                response = make_openAI_request(prompt,model,temperature)
 
-            response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
-
-            if response.status_code == 200:
                 answer = response.json()["choices"][0]["message"]["content"]
                 response_feedbacks.append({"phrase": laymans.laymans[i], "suggestion": answer})
-            else:
-                raise Exception(f"Error {response.status_code}: {response.text}")
+               
+            except Exception as e:
+                print(f"Error occured on: {e}")
+                return []
             
     return Response(data={"laymans": response_laymans, "feedbacks": response_feedbacks}, status=status.HTTP_200_OK)
