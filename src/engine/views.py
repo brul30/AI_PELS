@@ -13,7 +13,7 @@ from .models import Word
 
 import requests
 import json
-
+import stripe
 from pels.env import config
 
 
@@ -202,3 +202,19 @@ def feedback(request):
                 return []
             
     return Response(data={"laymans": response_laymans, "feedbacks": response_feedbacks}, status=status.HTTP_200_OK)
+
+
+
+@api_view(['POST'])
+def create_payment_intent(request):
+    try:
+        stripe.api_key = config("STRIPE_SECRET_KEY",default='none')
+        payment_intent = stripe.PaymentIntent.create(
+            amount=1999,
+            currency='eur',
+            automatic_payment_methods={'enabled': True},
+        )
+
+        return Response(data={'clientSecret': payment_intent.client_secret}, status=status.HTTP_200_OK)
+    except stripe.error.StripeError as e:
+        return Response(data={'error': {'message': str(e)}}, status=status.HTTP_400_BAD_REQUEST)
