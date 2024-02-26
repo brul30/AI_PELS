@@ -6,3 +6,5 @@ requests
 djangorestframework
 django-cors-headers
 stripe
+pyhyphen
+nltk

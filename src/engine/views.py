@@ -1,5 +1,8 @@
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
+from hyphen import Hyphenator, dictools
+import nltk
+from nltk.corpus import cmudict
 import re
 import json
 import requests
@@ -17,74 +20,51 @@ import stripe
 from pels.env import config
 
 
+def get_syllabus(word):
 
-def get_phonetic(word):
+    # Check if the dictionary is available, if not, download it
+    if not dictools.is_installed('en_US'):
+        dictools.install('en_US')
 
-    baseURL = config("SPEECHSUPER_URL",default='none')
-    appKey = config("SPEECH_SUPER_APP_KEY",default='none')
-    secretKey = config("SPEECH_SUPER_SECRET_KEY",default='none')
-    timestamp = str(int(time.time()))
-    coreType = "word.eval"         # Change the coreType according to your needs.
-    refText = f"{word}"        # Change the reference text according to your needs.
-    audioType = "wav"              # Change the audio type corresponding to the audio file.
-    audioSampleRate = 16000
-    userId = "guest"
-    url =  baseURL + coreType
-    connectStr = (appKey + timestamp + secretKey).encode("utf-8")
-    connectSig = hashlib.sha1(connectStr).hexdigest()
-    startStr = (appKey + timestamp + userId + secretKey).encode("utf-8")
-    startSig = hashlib.sha1(startStr).hexdigest()
-    params={
-        "connect":{
-            "cmd":"connect",
-            "param":{
-                "sdk":{
-                    "version":16777472,
-                    "source":9,
-                    "protocol":2
-                },
-                "app":{
-                    "applicationId":appKey,
-                    "sig":connectSig,
-                    "timestamp":timestamp
-                }
-            }
-        },
-        "start":{
-            "cmd":"start",
-            "param":{
-                "app":{
-                    "userId":userId,
-                    "applicationId":appKey,
-                    "timestamp":timestamp,
-                    "sig":startSig
-                },
-                "audio":{
-                    "audioType":audioType,
-                    "channel":1,
-                    "sampleBytes":2,
-                    "sampleRate":audioSampleRate
-                },
-                "request":{
-                    "coreType":coreType,
-                    "refText":refText,
-                    "tokenId":"tokenId"
-                }
-            }
-        }
-    }
-    datas=json.dumps(params)
-    data={'text':datas}
-    headers={"Request-Index":"0"}
-    res=requests.post(url, data=data, headers=headers).text.encode('utf-8', 'ignore').decode('utf-8')
-    data = json.loads(res)
-    phonetics = [stress_entry['phonetic'] for stress_entry in data['result']['words'][0]['scores']['stress']]
-    print(res)
-    return phonetics
+    hyphenator = Hyphenator('en_US')
 
-def phonetic_to_laymans(phonetic, word):
+    #word = "install"
+    syllables = hyphenator.syllables(word)
+    if syllables:
+        hyphenated_word = '-'.join(syllables)
+    else:
+        hyphenated_word = word  # fallback in case the word can't be hyphenated
+    
+    return hyphenated_word
+    print(f"Hyphenated word: {hyphenated_word}")
+
+def get_cmu_fomat(word):
+        nltk.download('cmudict')
+        pronouncing_dict = cmudict.dict()
+        """
+        Get the IPA representation of a word using CMU Pronouncing Dictionary.
+        """
+        word = word.lower()
+        if word in pronouncing_dict:
+            return pronouncing_dict[word][0]
+        else:
+            return None
+
+
+
+def get_cmu(word):
+# Download the CMU Pronouncing Dictionary if not already downloaded
+    #word = "controversial"
+    ipa = get_ipa(word)
+    if ipa:
+        print(f"IPA representation of '{word}': {' '.join(ipa)}")
+    else:
+        print(f"No IPA representation found for '{word}'")    
+
+
+def phonetic_to_laymans(cmu_pronounciation, word,syllabus):
     try:
-        prompt = f"Convert {phonetic} from {word} to simple American layman's pronunciation. Give me the array ONLY, seperate each syllable."
+        prompt = f"Convert {word} using {cmu_pronounciation} to simple American layman's pronunciation. Give me the array ONLY, seperate each syllable {syllabus}."
         model = 'gpt-4-1106-preview'
         response = make_openAI_request(prompt,model,0)
 
@@ -92,13 +72,13 @@ def phonetic_to_laymans(phonetic, word):
         print(answer)
         pattern = r"[\"'](.*?)[\"']"
         laymans = re.findall(pattern, answer)
+        print(laymans)
         return laymans
     
     except Exception as e:
         print(f"Error occured on: {e}")
         return []
-
-
+    
 def search_word(word):
 
     if not word or not isinstance(word, str):
@@ -118,11 +98,12 @@ def search_word(word):
         return Response({'error': "word was not found in database"})
 
 def get_laymans(word):
-
-    phonetic = get_phonetic(word)
-    laymans = phonetic_to_laymans(phonetic, word)
-    return phonetic, laymans
-    
+    syllabus = get_syllabus(word)
+    cmu_pronounciation = get_cmu(word)
+    laymans = phonetic_to_laymans(cmu_pronounciation, word,syllabus)
+#    return phonetic, laymans
+    return cmu_pronounciation, laymans
+   
 def create_word(word, phonetic, laymans):
 
     word = Word(word=word, phonetic=phonetic, laymans=laymans)
