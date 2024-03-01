@@ -56,3 +56,11 @@ def login(request):
 def test_token(request):
     return Response("passed!")
 
+
+
+@api_view(['GET'])
+@authentication_classes([SessionAuthentication, TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def subscriptionStatus(request):
+    #Do logic here for accoutn subscription using the stripe account
+    return Response("no SubscriptinStatus yet")
