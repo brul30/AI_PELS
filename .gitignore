@@ -265,3 +265,6 @@ dist
 package-lock.json
 
 requirements.txt
+
+win_venv/
+macos-venv/
