@@ -210,10 +210,10 @@ def test_feedback(request):
 @api_view(['POST'])
 def process_audio(request):
 
-    print(request.data)
+    # print(request.data)
+
     isSingleWord = request.data.get('isSingleWord')
 
-    # Ensure the directories exist
     mp3_dir = os.path.join('media', 'mp3')
     wav_dir = os.path.join('media', 'wav')
     os.makedirs(mp3_dir, exist_ok=True)
@@ -237,8 +237,7 @@ def process_audio(request):
 
     # Save the original audio blob in MP3 format
     with default_storage.open(path_original_mp3, 'wb+') as destination:
-        for chunk in audio_blob.chunks():
-            destination.write(chunk)
+        destination.write(audio_blob.read())
 
     print(f'Original MP3 file saved at {path_original_mp3}')
     print(f'Converted WAV file saved at {path_converted_wav}')
@@ -253,6 +252,8 @@ def process_audio(request):
         default_storage.path(path_converted_wav)
     ]
     subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    # print('Audio converted to WAV format')
 
     # speech config
     speech_config = speechsdk.SpeechConfig(subscription=os.getenv('SPEECH_KEY'), region=os.getenv('SPEECH_REGION'))
