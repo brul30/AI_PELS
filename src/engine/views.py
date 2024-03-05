@@ -13,6 +13,8 @@ from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.core.files.storage import default_storage
 from django.conf import settings
+from django.core.exceptions import MultipleObjectsReturned
+
 
 from .models import Word
 from .serializers import WordSerializer
@@ -281,13 +283,13 @@ def process_audio(request):
     pronunciation_assessment_result_json = speech_recognition_result.properties.get(speechsdk.PropertyId.SpeechServiceResponse_JsonResult)
 
     result_json = json.loads(pronunciation_assessment_result_json)
+    #print(result_json)
 
     if isSingleWord.lower() == 'false':
         # send word laymans, score, and feedback
         print('isSingleWord is false')
         #sentence_result = result_json.get("NBest", [])[0]
         return Response(data=result_json, status=status.HTTP_200_OK)
-    
     else:
         # send only word laymans and score
         scores = []
@@ -298,8 +300,14 @@ def process_audio(request):
             syllable = syllable.replace("x", "")
             #return_json[syllable] = score
             scores.append({"phrase": syllable, "score": score})
-        #print(scores)
-        word = Word.objects.get(word=request.data.get('word'))
+
+        try:
+            word = Word.objects.get(word=request.data.get('word'))
+        except MultipleObjectsReturned:
+            words = Word.objects.filter(word=request.data.get('word'))
+            word = words.first()
+            words.exclude(pk=word.pk).delete()
+        
         laymans = word.laymans
         request = {
             "scores": scores,
