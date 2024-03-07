@@ -266,5 +266,7 @@ package-lock.json
 
 win-venv/
 macos-venv/
+venv/
+mvenv/
 
 media/
