@@ -26,6 +26,7 @@ from .serializers import UserSerializer
 
 @api_view(['POST'])
 def signup(request):
+    print(request.data)
     serializer = UserSerializer(data=request.data)
     if serializer.is_valid():
         serializer.save()
@@ -33,17 +34,20 @@ def signup(request):
         user.set_password(request.data['password'])
         user.save()
         token = Token.objects.create(user=user)
-        return Response({'token': token.key, 'user': serializer.data})
-    return Response(serializer.errors, status=status.HTTP_200_OK)
+        #return response in json format
+        return Response({'token': token.key, 'user': serializer.data}, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 @api_view(['POST'])
 def login(request):
-    user = get_object_or_404(User, username=request.data['username'])
+    print(request.data)
+    user = get_object_or_404(User, email=request.data['email'])
     if not user.check_password(request.data['password']):
         return Response("missing user", status=status.HTTP_404_NOT_FOUND)
     token, created = Token.objects.get_or_create(user=user)
     serializer = UserSerializer(user)
-    return Response({'token': token.key, 'user': serializer.data})
+    print(token.key, serializer.data)
+    return Response({'token': token.key, 'user': serializer.data}, status=status.HTTP_200_OK)
 
 @api_view(['GET'])
 @authentication_classes([SessionAuthentication, TokenAuthentication])
@@ -61,19 +65,17 @@ def subscriptionStatus(request):
 @api_view(['GET'])
 def create_payment_intent(request):
     
-    # print("STRIPE_SECRET_KEY", os.getenv('STRIPE_SECRET_KEY'))
-    # print(request)
+    print("STRIPE_SECRET_KEY", os.getenv('STRIPE_SECRET_KEY'))
+    print(request)
 
-    # try:
-    #     stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+    try:
+        stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 
-    #     payment_intent = stripe.PaymentIntent.create(
-    #         amount=1999,
-    #         currency='eur',
-    #         automatic_payment_methods={'enabled': True},
-    #     )
-
-    #     return Response(data={'clientSecret': payment_intent.client_secret}, status=status.HTTP_200_OK)
-    # except stripe.error.StripeError as e:
-    #     return Response(data={'error': {'message': str(e)}}, status=status.HTTP_400_BAD_REQUEST)
-    print("hello")
+        payment_intent = stripe.PaymentIntent.create(
+            amount=1999,
+            currency='eur',
+            automatic_payment_methods={'enabled': True},
+        )
+        return Response(data={'clientSecret': payment_intent.client_secret}, status=status.HTTP_200_OK)
+    except stripe.error.StripeError as e:
+        return Response(data={'error': {'message': str(e)}}, status=status.HTTP_400_BAD_REQUEST)

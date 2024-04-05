@@ -2,7 +2,11 @@ import json
 import os
 import re
 import secrets
+import time
 import subprocess
+from openai import OpenAI
+from typing_extensions import override
+from openai import AssistantEventHandler
 
 from dotenv import load_dotenv
 import requests
@@ -139,7 +143,7 @@ def generate_feedback(request):
     #print(scores, laymans, word)
     for i, x in enumerate(laymans):
         score_and_laymans_joined.append({"phrase": x, "score": scores[i].get('score')})
-        if scores[i].get('score') <= 80:
+        if scores[i].get('score') <= 90:
             prompt = f"For '{x}' in '{word}', give a concise articulation tip. One sentence only."
             message = [{"role": "user", "content": prompt}]
             data = {
@@ -149,8 +153,8 @@ def generate_feedback(request):
             }
             response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
             if response.status_code == 200:
-                articulation_tip = response.json()["choices"][0]["message"]["content"]
-                feedbacks.append({"phrase": x, "articulation_tip": articulation_tip})
+                suggestion = response.json()["choices"][0]["message"]["content"]
+                feedbacks.append({"phrase": x, "suggestion": suggestion})
                 # score_and_laymans_joined[i]["articulation_tip"] = articulation_tip
             else:
                 raise Exception(f"Error {response.status_code}: {response.text}")
@@ -163,59 +167,8 @@ def generate_feedback(request):
     
     return return_data
 
-@api_view(['POST'])
-def test_feedback(request):
-
-    scores = request.data.get('scores')
-    laymans = request.data.get('laymans')
-    word = request.data.get('word')
-
-    #print(scores, laymans, word)
+def process_audio_files(request):
     
-    OPENAI_SECRET_KEY = os.getenv('OPENAI_SECRET_KEY')
-    OPENAI_ENDPOINT = os.getenv('OPENAI_ENDPOINT')
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {OPENAI_SECRET_KEY}",
-    }
-
-    print('generate_feedback')
-    score_and_laymans_joined = []
-    feedbacks = []
-    #print(scores, laymans, word)
-    for i, x in enumerate(laymans):
-        score_and_laymans_joined.append({"phrase": x, "score": scores[i].get('score')})
-        if scores[i].get('score') <= 80:
-            prompt = f"For '{x}' in '{word}', give a concise articulation tip. One sentence only."
-            message = [{"role": "user", "content": prompt}]
-            data = {
-                "model": 'gpt-4-0125-preview',
-                "messages": message,
-                "temperature": 1,
-            }
-            response = requests.post(OPENAI_ENDPOINT, headers=headers, data=json.dumps(data))
-            if response.status_code == 200:
-                articulation_tip = response.json()["choices"][0]["message"]["content"]
-                feedbacks.append({"phrase": x, "articulation_tip": articulation_tip})
-                # score_and_laymans_joined[i]["articulation_tip"] = articulation_tip
-            else:
-                raise Exception(f"Error {response.status_code}: {response.text}")
-            
-    print(score_and_laymans_joined, feedbacks)
-    return_data = {
-        "scores": score_and_laymans_joined,
-        "feedbacks": feedbacks
-    }
-    
-    return Response(data=return_data, status=status.HTTP_200_OK)
-           
-@api_view(['POST'])
-def process_audio(request):
-
-    # print(request.data)
-
-    isSingleWord = request.data.get('isSingleWord')
-
     mp3_dir = os.path.join('media', 'mp3')
     wav_dir = os.path.join('media', 'wav')
     os.makedirs(mp3_dir, exist_ok=True)
@@ -241,9 +194,6 @@ def process_audio(request):
     with default_storage.open(path_original_mp3, 'wb+') as destination:
         destination.write(audio_blob.read())
 
-    print(f'Original MP3 file saved at {path_original_mp3}')
-    print(f'Converted WAV file saved at {path_converted_wav}')
-
     # Convert the audio to WAV format using FFmpeg
     command = [
         'ffmpeg',
@@ -255,9 +205,20 @@ def process_audio(request):
     ]
     subprocess.run(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-    # print('Audio converted to WAV format')
+    return path_converted_wav
 
-    # speech config
+def create_configuration(request, path_converted_wav, process_type):
+
+    if (process_type == 'word'):
+        granularity = speechsdk.PronunciationAssessmentGranularity.Phoneme
+    else:
+        granularity = speechsdk.PronunciationAssessmentGranularity.Word
+
+    # if (process_type == 'chatbot'):
+    #     speech_config = speechsdk.SpeechConfig(subscription=os.getenv('SPEECH_KEY'), region=os.getenv('SPEECH_REGION'))
+    #     speech_config.speech_recognition_language="en-US"
+    #     return speechsdk.SpeechRecognizer(speech_config=speech_config)
+
     speech_config = speechsdk.SpeechConfig(subscription=os.getenv('SPEECH_KEY'), region=os.getenv('SPEECH_REGION'))
     speech_config.speech_recognition_language="en-US"
 
@@ -266,67 +227,170 @@ def process_audio(request):
     # audio config
     audio_config = speechsdk.audio.AudioConfig(filename = full_path)
 
-    # speech recognizer
-    speech_recognizer = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
-
     # Pronunciation config
     pronunciation_config = speechsdk.PronunciationAssessmentConfig( 
         reference_text=f"{request.data.get('word')}",
         grading_system=speechsdk.PronunciationAssessmentGradingSystem.HundredMark,
-        granularity=speechsdk.PronunciationAssessmentGranularity.Phoneme,
+        granularity=granularity,
         enable_miscue=False)
+    
+    return_config = speechsdk.SpeechRecognizer(speech_config=speech_config, audio_config=audio_config)
+    pronunciation_config.apply_to(return_config)
+    return return_config
 
-    # add pronunciation assessment to speech recognizer
-    pronunciation_config.apply_to(speech_recognizer)
-
+def process_sentence(request):
+    path_converted_wav = process_audio_files(request)
+    speech_recognizer = create_configuration(request, path_converted_wav, 'sentence')
     speech_recognition_result = speech_recognizer.recognize_once_async().get()
     pronunciation_assessment_result_json = speech_recognition_result.properties.get(speechsdk.PropertyId.SpeechServiceResponse_JsonResult)
-
     result_json = json.loads(pronunciation_assessment_result_json)
-    #print(result_json)
+    print(result_json)
+    return Response(data=result_json, status=status.HTTP_200_OK)
 
-    if isSingleWord.lower() == 'false':
-        # send word laymans, score, and feedback
-        print('isSingleWord is false')
-        #sentence_result = result_json.get("NBest", [])[0]
-        return Response(data=result_json, status=status.HTTP_200_OK)
-    else:
-        # send only word laymans and score
-        scores = []
-        print('isSingleWord is true')
-        for x in result_json.get("NBest", [])[0].get("Words", [])[0].get("Syllables", []):
-            syllable = x.get("Syllable")
-            score = x.get("PronunciationAssessment", {}).get("AccuracyScore")
-            syllable = syllable.replace("x", "")
-            #return_json[syllable] = score
-            scores.append({"phrase": syllable, "score": score})
-
-        try:
-            word = Word.objects.get(word=request.data.get('word'))
-        except MultipleObjectsReturned:
-            words = Word.objects.filter(word=request.data.get('word'))
-            word = words.first()
-            words.exclude(pk=word.pk).delete()
-        
-        laymans = word.laymans
-        request = {
-            "scores": scores,
-            "laymans": laymans,
-            "word": word
-        }
-        feedback = generate_feedback(request)
-
+def process_word(request):
+    path_converted_wav = process_audio_files(request)
+    speech_recognizer = create_configuration(request, path_converted_wav, 'word')
+    speech_recognition_result = speech_recognizer.recognize_once_async().get()
+    pronunciation_assessment_result_json = speech_recognition_result.properties.get(speechsdk.PropertyId.SpeechServiceResponse_JsonResult)
+    result_json = json.loads(pronunciation_assessment_result_json)
+    scores = []
+    for x in result_json.get("NBest", [])[0].get("Words", [])[0].get("Syllables", []):
+        syllable = x.get("Syllable")
+        score = x.get("PronunciationAssessment", {}).get("AccuracyScore")
+        syllable = syllable.replace("x", "")
+        #return_json[syllable] = score
+        scores.append({"phrase": syllable, "score": score})
     try:
-        os.remove(path_original_mp3)
-        print(f'Deleted MP3 file: {path_original_mp3}')
-    except Exception as e:
-        print(f'Error deleting MP3 file: {e}')
-    
-    try:
-        os.remove(path_converted_wav)
-        print(f'Deleted WAV file: {path_converted_wav}')
-    except Exception as e:
-        print(f'Error deleting WAV file: {e}')
-
+        word = Word.objects.get(word=request.data.get('word'))
+    except MultipleObjectsReturned:
+        words = Word.objects.filter(word=request.data.get('word'))
+        word = words.first()
+        words.exclude(pk=word.pk).delete()
+    laymans = word.laymans
+    request = {
+        "scores": scores,
+        "laymans": laymans,
+        "word": word
+    }
+    feedback = generate_feedback(request)
     return Response(data=feedback, status=status.HTTP_200_OK)
 
+def process_assessment(request):
+    print(request.data)
+    return Response(data={"message": "not implemented yet lel"}, status=status.HTTP_200_OK)
+
+def init_chatbot(client: OpenAI, session):
+    # Create a new assistant and thread as before
+    chatbot = client.beta.assistants.create(
+        name="pronunciation_assistant_roleplay",
+        instructions="You are a chatbot that is roleplaying as an interviewer. You are interviewing a candidate for a job. The candidate is a non-native English speaker. You are to ask the candidate questions and provide feedback on their pronunciation.",
+        model="gpt-4-turbo-preview",
+    )
+    thread = client.beta.threads.create()
+
+    thread_id = thread.id
+    chatbot_id = chatbot.id
+
+    session['thread_id'] = thread_id
+    session['chatbot_id'] = chatbot_id
+    
+    # Automatically generate the first chatbot message
+    initial_message = "Hello! I'm your interviewer today. Let's start with a simple question: Could you tell me a little about yourself?"
+    # Create the message in the thread with the specified role
+    client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role="assistant",  # This now depends on the sender_role argument
+            content=initial_message
+        )
+    
+    print(thread_id, chatbot_id, "initialized")
+
+def add_message(message_content, sender_role, client: OpenAI, session):
+
+    thread_id = session.get('thread_id')
+    chatbot_id = session.get('chatbot_id')
+    
+    if not thread_id or not chatbot_id:
+        # Handle uninitialized chat session
+        return "Session expired or not initialized."
+
+    try:
+        # Create the message in the thread with the specified role
+        message = client.beta.threads.messages.create(
+            thread_id=thread_id,
+            role=sender_role,  # This now depends on the sender_role argument
+            content=message_content
+        )
+
+        # Add chatbot message and wait for the response
+        run = client.beta.threads.runs.create_and_poll(
+            thread_id=thread_id,
+            assistant_id=chatbot_id,
+            instructions="You are a chatbot that is roleplaying as an interviewer. You are interviewing a candidate for a job. The candidate is a non-native English speaker. You are to ask the candidate questions and provide feedback on their pronunciation."
+        )
+
+        #wait like 5 seconds
+        time.sleep(5)
+        
+        # Assuming we get the chatbot response immediately
+        chatbot_response = run.messages[-1]
+        print(chatbot_response)
+        return chatbot_response
+        
+    except Exception as e:
+        # Handle errors (e.g., API failure, network issues)
+        print(f"An error occurred: {str(e)}")
+        return "An error occurred while adding the message."
+
+def process_chatbot(request):
+    try:
+        session = request.session
+
+        path_converted_wav = process_audio_files(request)
+        speech_recognizer = create_configuration(request, path_converted_wav, 'chatbot')
+        speech_recognition_result = speech_recognizer.recognize_once_async().get()
+        pronunciation_assessment_result_json = speech_recognition_result.properties.get(speechsdk.PropertyId.SpeechServiceResponse_JsonResult)
+        result_json = json.loads(pronunciation_assessment_result_json)
+
+        user_message = result_json.get("DisplayText")
+        fluency_score = result_json.get("NBest", [])[0].get("PronunciationAssessment", {}).get("FluencyScore")
+
+        print(user_message, fluency_score)
+
+        client = OpenAI()
+
+        if not session.get('thread_id'):
+            init_chatbot(client, session)
+
+        chatbot_reponse = add_message(user_message, "user", client, session)
+
+        JsonResponse = {
+            "user_message": user_message,
+            "fluency_score": fluency_score,
+            "chatbot_response": chatbot_reponse
+        }
+
+        return Response(data=JsonResponse, status=status.HTTP_200_OK)
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        return Response(data="An error occurred while processing chatbot", status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['POST'])
+def process(request):
+
+    process_type = request.data.get('type')
+    print(process_type)
+    if (process_type == 'word'):
+        print("processing word")
+        return process_word(request)
+    elif (process_type == 'sentence'):
+        print("processing sentence")
+        return process_sentence(request)
+    elif (process_type == 'assessment'):
+        print("processing assessment")
+        return process_assessment(request)
+    elif (process_type == 'chatbot'):
+        print("processing chatbot")
+        return process_chatbot(request)
+    else:
+        return Response(data="Invalid process type", status=status.HTTP_400_BAD_REQUEST)
